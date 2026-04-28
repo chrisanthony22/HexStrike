@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HEXSTRIKE | MULTIBALL PROTOCOL</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&family=Exo+2:wght@100;400;800;900&display=swap" rel="stylesheet">
+    <!-- CrazyGames SDK -->
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+    <style>
+        :root {
+            --neon-cyan: #00f5ff;
+            --neon-blue: #0066ff;
+            --neon-pink: #ff0080;
+            --neon-green: #00ff88;
+            --neon-orange: #ff6600;
+            --dark: #020408;
+            --panel-bg: rgba(0, 10, 20, 0.92);
+            --border: rgba(0, 245, 255, 0.3);
+            --glow-cyan: 0 0 20px rgba(0, 245, 255, 0.5), 0 0 40px rgba(0, 245, 255, 0.2);
+            --glow-pink: 0 0 20px rgba(255, 0, 128, 0.5);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+
+        body {
+            background: var(--dark);
+            color: #fff;
+            font-family: 'Exo 2', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            cursor: crosshair;
+        }
+
+        /* Animated starfield background */
+        #bg-canvas {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* Scanline overlay */
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 245, 255, 0.015) 2px,
+                rgba(0, 245, 255, 0.015) 4px
+            );
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        #master-wrap {
+            display: flex;
+            gap: 20px;
+            padding: 15px;
+            width: 100%;
+            max-width: 1120px;
+            justify-content: center;
+            z-index: 2;
+            position: relative;
+        }
+
+        /* ── GAME CONTAINER ── */
+        #game-container {
+            position: relative;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid var(--neon-cyan);
+            box-shadow: var(--glow-cyan), inset 0 0 60px rgba(0,0,0,0.8);
+        }
+
+        /* Corner decorations */
+        #game-container::before, #game-container::after {
+            content: "";
+            position: absolute;
+            width: 20px; height: 20px;
+            border-color: var(--neon-cyan);
+            border-style: solid;
+            z-index: 20;
+        }
+        #game-container::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+        #game-container::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+        canvas { display: block; max-width: 100%; height: auto; touch-action: none; }
+
+        /* ── SIDEBAR ── */
+        #sidebar {
+            width: 200px;
+            background: var(--panel-bg);
+            border-radius: 4px;
+            padding: 20px 15px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            backdrop-filter: blur(20px);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .sidebar-header {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 9px;
+            letter-spacing: 3px;
+            color: var(--neon-cyan);
+            text-transform: uppercase;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .stat-block {
+            position: relative;
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(0, 245, 255, 0.08);
+        }
+
+        .stat-label {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 9px;
+            letter-spacing: 3px;
+            color: rgba(0, 245, 255, 0.5);
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 5px;
+        }
+
+        .stat-label::before {
+            content: "";
+            display: inline-block;
+            width: 4px; height: 4px;
+            background: var(--neon-cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--neon-cyan);
+        }
+
+        .stat-val {
+            font-family: 'Exo 2', sans-serif;
+            font-size: 30px;
+            font-weight: 900;
+            color: #fff;
+            line-height: 1;
+            text-shadow: 0 0 15px rgba(0,245,255,0.4);
+        }
+
+        .stat-val.highlight { color: var(--neon-cyan); }
+
+        /* Ball indicators */
+        #ball-indicators {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 6px;
+        }
+
+        .ball-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--neon-cyan);
+            box-shadow: 0 0 8px var(--neon-cyan);
+            transition: all 0.2s;
+        }
+
+        .ball-dot.dead {
+            background: rgba(255,255,255,0.1);
+            box-shadow: none;
+        }
+
+        /* Power-up legend */
+        #powerup-legend {
+            margin-top: 20px;
+            padding-top: 15px;
+        }
+
+        .legend-title {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 8px;
+            letter-spacing: 2px;
+            color: rgba(0,245,255,0.4);
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 7px;
+            font-size: 10px;
+            color: rgba(255,255,255,0.5);
+            font-family: 'Share Tech Mono', monospace;
+        }
+
+        .legend-badge {
+            width: 20px; height: 20px;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 11px;
+            flex-shrink: 0;
+        }
+
+        .badge-x1 { background: rgba(0,255,136,0.2); color: var(--neon-green); border: 1px solid var(--neon-green); }
+        .badge-x2 { background: rgba(255,0,128,0.2); color: var(--neon-pink); border: 1px solid var(--neon-pink); }
+        .badge-x3 { background: rgba(255,102,0,0.2); color: var(--neon-orange); border: 1px solid var(--neon-orange); }
+
+        /* ── OVERLAY ── */
+        #overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(2, 4, 8, 0.97);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            text-align: center;
+            padding: 30px;
+        }
+
+        .overlay-logo {
+            font-family: 'Exo 2', sans-serif;
+            font-size: 11px;
+            font-weight: 100;
+            letter-spacing: 8px;
+            color: var(--neon-cyan);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            opacity: 0.7;
+        }
+
+        .overlay-title {
+            font-family: 'Exo 2', sans-serif;
+            font-size: 3.2rem;
+            font-weight: 900;
+            letter-spacing: 6px;
+            color: #fff;
+            text-transform: uppercase;
+            line-height: 1;
+            text-shadow: 0 0 30px var(--neon-cyan), 0 0 60px rgba(0,245,255,0.3);
+            margin-bottom: 6px;
+        }
+
+        .overlay-sub {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 10px;
+            letter-spacing: 4px;
+            color: rgba(0,245,255,0.5);
+            margin-bottom: 40px;
+            text-transform: uppercase;
+        }
+
+        /* Decorative hexagons in overlay */
+        .hex-decoration {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 30px;
+        }
+
+        .hex-deco {
+            width: 12px; height: 12px;
+            background: var(--neon-cyan);
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            opacity: 0.4;
+        }
+        .hex-deco:nth-child(2) { opacity: 0.7; background: var(--neon-pink); }
+        .hex-deco:nth-child(3) { opacity: 0.4; }
+
+        #overlay-stats {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .ovl-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .ovl-label {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 8px;
+            letter-spacing: 3px;
+            color: rgba(0,245,255,0.4);
+            text-transform: uppercase;
+        }
+
+        .ovl-val {
+            font-family: 'Exo 2', sans-serif;
+            font-size: 22px;
+            font-weight: 900;
+            color: #fff;
+        }
+
+        #ad-banner {
+            width: 300px;
+            height: 50px;
+            background: rgba(0,245,255,0.05);
+            border: 1px solid rgba(0,245,255,0.2);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 25px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: rgba(0,245,255,0.3);
+        }
+
+        .btn-primary {
+            position: relative;
+            padding: 16px 50px;
+            background: transparent;
+            color: var(--neon-cyan);
+            border: 1px solid var(--neon-cyan);
+            font-family: 'Exo 2', sans-serif;
+            font-weight: 800;
+            font-size: 13px;
+            border-radius: 2px;
+            cursor: pointer;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+            transition: all 0.2s;
+            box-shadow: var(--glow-cyan), inset 0 0 20px rgba(0,245,255,0.05);
+            overflow: hidden;
+        }
+
+        .btn-primary::before {
+            content: "";
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0,245,255,0.15), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn-primary:hover::before { left: 100%; }
+        .btn-primary:hover {
+            background: rgba(0,245,255,0.08);
+            box-shadow: var(--glow-cyan), inset 0 0 30px rgba(0,245,255,0.1);
+        }
+
+        .btn-secondary {
+            padding: 10px 30px;
+            background: transparent;
+            color: rgba(255,255,255,0.4);
+            border: 1px solid rgba(255,255,255,0.15);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 10px;
+            border-radius: 2px;
+            cursor: pointer;
+            letter-spacing: 3px;
+            margin-top: 12px;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { color: var(--neon-pink); border-color: var(--neon-pink); }
+
+        /* ── HUD elements on canvas ── */
+        #level-flash {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Exo 2', sans-serif;
+            font-size: 60px;
+            font-weight: 900;
+            color: var(--neon-cyan);
+            text-shadow: 0 0 40px var(--neon-cyan);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 5;
+            letter-spacing: 4px;
+            white-space: nowrap;
+        }
+
+        /* Particle canvas for explosions */
+        #particle-canvas {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 3;
+        }
+
+        @media (max-width: 850px) {
+            #master-wrap { flex-direction: column; align-items: center; }
+            #sidebar {
+                width: 100%;
+                flex-direction: row;
+                padding: 12px 15px;
+                gap: 0;
+                justify-content: space-around;
+                flex-wrap: wrap;
+            }
+            .stat-block { border-bottom: none; padding: 8px 10px; }
+            #powerup-legend { display: none; }
+            .sidebar-header { display: none; }
+            .overlay-title { font-size: 2.2rem; }
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+
+<div id="master-wrap">
+    <div id="game-container">
+        <div id="overlay">
+            <div class="overlay-logo">Protocol v2.0 :: Multiball Edition</div>
+            <div class="overlay-title" id="status-title">HEXSTRIKE</div>
+            <div class="overlay-sub" id="status-sub">Multiball Grid Protocol</div>
+            <div class="hex-decoration">
+                <div class="hex-deco"></div>
+                <div class="hex-deco"></div>
+                <div class="hex-deco"></div>
+                <div class="hex-deco"></div>
+                <div class="hex-deco"></div>
+            </div>
+            <div id="overlay-stats" style="display:none">
+                <div class="ovl-stat">
+                    <span class="ovl-label">Score</span>
+                    <span class="ovl-val" id="final-score">0</span>
+                </div>
+                <div class="ovl-stat">
+                    <span class="ovl-label">Level</span>
+                    <span class="ovl-val" id="final-level">1</span>
+                </div>
+            </div>
+            <div id="ad-banner">[ ADVERTISEMENT ZONE ]</div>
+            <button class="btn-primary" id="main-btn" onclick="handleBtnClick()">INITIALIZE GRID</button>
+            <button class="btn-secondary" id="sec-btn" style="display:none" onclick="handleSecondary()">MAIN MENU</button>
+        </div>
+        <div id="level-flash"></div>
+        <canvas id="gameCanvas"></canvas>
+        <canvas id="particle-canvas"></canvas>
+    </div>
+
+    <div id="sidebar">
+        <div class="sidebar-header">⬡ SYS STATUS</div>
+
+        <div class="stat-block">
+            <div class="stat-label">SECTOR</div>
+            <div class="stat-val highlight" id="lvl-txt">01</div>
+        </div>
+
+        <div class="stat-block">
+            <div class="stat-label">NODES</div>
+            <div class="stat-val" id="count">00</div>
+        </div>
+
+        <div class="stat-block">
+            <div class="stat-label">SCORE</div>
+            <div class="stat-val" id="score">0</div>
+        </div>
+
+        <div class="stat-block">
+            <div class="stat-label">ACTIVE BALLS</div>
+            <div id="ball-indicators"></div>
+        </div>
+
+        <div id="powerup-legend">
+            <div class="legend-title">⬡ Node Types</div>
+            <div class="legend-item"><div class="legend-badge badge-x1">+1</div><span>+1 Ball</span></div>
+            <div class="legend-item"><div class="legend-badge badge-x2">+2</div><span>+2 Balls</span></div>
+            <div class="legend-item"><div class="legend-badge badge-x3">+3</div><span>+3 Balls</span></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  CrazyGames SDK Integration
+// ══════════════════════════════════════════════════
+const CG = {
+    sdk: null,
+    ready: false,
+    init() {
+        try {
+            if (window.CrazyGames && window.CrazyGames.SDK) {
+                this.sdk = window.CrazyGames.SDK;
+                this.sdk.init().then(() => { this.ready = true; });
+            }
+        } catch(e) { console.log('CG SDK not available:', e); }
+    },
+    showAd(type = 'midgame') {
+        if (!this.ready || !this.sdk) return Promise.resolve();
+        return new Promise(resolve => {
+            try {
+                const callbacks = { adStarted: () => {}, adError: () => resolve(), adFinished: () => resolve() };
+                if (type === 'rewarded') this.sdk.ad.requestRewardedAd(callbacks);
+                else this.sdk.ad.requestMidgameAd(callbacks);
+            } catch(e) { resolve(); }
+        });
+    },
+    gameplayStart() { try { if(this.ready) this.sdk.game.gameplayStart(); } catch(e){} },
+    gameplayStop()  { try { if(this.ready) this.sdk.game.gameplayStop(); } catch(e){} },
+    happyTime()     { try { if(this.ready) this.sdk.game.happytime(); } catch(e){} }
+};
+CG.init();
+
+// ══════════════════════════════════════════════════
+//  BG Starfield
+// ══════════════════════════════════════════════════
+const bgCanvas = document.getElementById('bg-canvas');
+const bgCtx = bgCanvas.getContext('2d');
+bgCanvas.width = window.innerWidth;
+bgCanvas.height = window.innerHeight;
+const stars = Array.from({length: 200}, () => ({
+    x: Math.random() * bgCanvas.width,
+    y: Math.random() * bgCanvas.height,
+    r: Math.random() * 1.5,
+    speed: Math.random() * 0.3 + 0.05,
+    opacity: Math.random()
+}));
+function animateBg() {
+    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+    stars.forEach(s => {
+        s.opacity += (Math.random() - 0.5) * 0.02;
+        s.opacity = Math.max(0.1, Math.min(0.9, s.opacity));
+        bgCtx.beginPath();
+        bgCtx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        bgCtx.fillStyle = `rgba(0,245,255,${s.opacity * 0.4})`;
+        bgCtx.fill();
+    });
+    requestAnimationFrame(animateBg);
+}
+animateBg();
+
+// ══════════════════════════════════════════════════
+//  PARTICLE SYSTEM
+// ══════════════════════════════════════════════════
+const pCanvas = document.getElementById('particle-canvas');
+const pCtx = pCanvas.getContext('2d');
+pCanvas.width = 480; pCanvas.height = 640;
+let particles = [];
+
+function spawnParticles(x, y, color, count = 12) {
+    for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 / count) * i + Math.random() * 0.5;
+        const speed = Math.random() * 4 + 1;
+        particles.push({
+            x, y,
+            dx: Math.cos(angle) * speed,
+            dy: Math.sin(angle) * speed,
+            life: 1.0,
+            decay: Math.random() * 0.04 + 0.02,
+            size: Math.random() * 3 + 1,
+            color
+        });
+    }
+}
+
+function updateParticles() {
+    pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.dx; p.y += p.dy;
+        p.dy += 0.08;
+        p.life -= p.decay;
+        if (p.life <= 0) { particles.splice(i, 1); continue; }
+        pCtx.save();
+        pCtx.globalAlpha = p.life;
+        pCtx.shadowBlur = 8;
+        pCtx.shadowColor = p.color;
+        pCtx.fillStyle = p.color;
+        pCtx.beginPath();
+        pCtx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        pCtx.fill();
+        pCtx.restore();
+    }
+}
+
+// ══════════════════════════════════════════════════
+//  AUDIO
+// ══════════════════════════════════════════════════
+const AudioEngine = {
+    ctx: null,
+    init() { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} },
+    play(freq, type, vol, dur, slide = 0) {
+        if (!this.ctx) return;
+        try {
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            if (slide) osc.frequency.exponentialRampToValueAtTime(slide, this.ctx.currentTime + dur);
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            osc.start(); osc.stop(this.ctx.currentTime + dur);
+        } catch(e) {}
+    },
+    levelUp() {
+        [220, 330, 440, 660].forEach((f, i) => {
+            setTimeout(() => this.play(f, 'sawtooth', 0.08, 0.15, f * 1.5), i * 80);
+        });
+    },
+    gameOver() {
+        [440, 330, 220, 110].forEach((f, i) => {
+            setTimeout(() => this.play(f, 'sawtooth', 0.1, 0.2), i * 100);
+        });
+    }
+};
+AudioEngine.init();
+
+// ══════════════════════════════════════════════════
+//  GAME CORE
+// ══════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = 480; canvas.height = 640;
+
+const overlay = document.getElementById('overlay');
+const statusTitle = document.getElementById('status-title');
+const statusSub = document.getElementById('status-sub');
+const overlayStats = document.getElementById('overlay-stats');
+const adBanner = document.getElementById('ad-banner');
+const mainBtn = document.getElementById('main-btn');
+const secBtn = document.getElementById('sec-btn');
+const levelFlash = document.getElementById('level-flash');
+
+let gameActive = false, score = 0, currentLevel = 1, mouseX = 240;
+let isMobileView = window.innerWidth < 850;
+
+const HEX_RADIUS = isMobileView ? 20 : 28;
+const HEX_W = Math.sqrt(3) * HEX_RADIUS;
+const HEX_H = 2 * HEX_RADIUS;
+
+let balls = [];
+const paddle = { width: 110, height: 10, x: 185, y: 605 };
+const bricks = [];
+
+// Particle color palette for hits
+const HIT_COLORS = ['#00f5ff', '#ff0080', '#00ff88', '#ff6600', '#ffffff'];
+
+function getPowerUpColor(pwr) {
+    if (pwr === 1) return '#00ff88';
+    if (pwr === 2) return '#ff0080';
+    if (pwr === 3) return '#ff6600';
+    return '#00f5ff';
+}
+
+function createBall(x, y, dx, dy) {
+    return {
+        x, y, radius: 7,
+        dx: dx !== undefined ? dx : (Math.random() * 6 - 3),
+        dy: dy !== undefined ? dy : -5,
+        history: [],
+        hue: Math.random() * 60  // slight color variation
+    };
+}
+
+// ── DRAW HEXAGON BRICK ──
+function drawHex(brick) {
+    const { x, y, row, powerUp, hitFlash } = brick;
+    const r = HEX_RADIUS;
+    
+    ctx.save();
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i + (Math.PI / 6);
+        const method = i === 0 ? 'moveTo' : 'lineTo';
+        ctx[method](x + r * Math.cos(angle), y + r * Math.sin(angle));
+    }
+    ctx.closePath();
+
+    // Fill based on type
+    if (powerUp > 0) {
+        const col = getPowerUpColor(powerUp);
+        const alpha = 0.15 + hitFlash * 0.3;
+        ctx.fillStyle = col.replace('#', 'rgba(').replace(/(..)(..)(..)/, (m, r, g, b) =>
+            `${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)},${alpha})`);
+        ctx.fill();
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1.5;
+        ctx.shadowBlur = 10 + hitFlash * 10;
+        ctx.shadowColor = col;
+        ctx.stroke();
+        
+        // Label
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = col;
+        ctx.font = `bold ${r * 0.65}px "Exo 2", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`+${powerUp}`, x, y);
+    } else {
+        // Normal hexagon — sci-fi grid style
+        const depthAlpha = Math.max(0.08, 0.35 - row * 0.022);
+        ctx.fillStyle = `rgba(0,245,255,${depthAlpha})`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(0,245,255,${0.4 + hitFlash * 0.4})`;
+        ctx.lineWidth = 1;
+        ctx.shadowBlur = 6 + hitFlash * 12;
+        ctx.shadowColor = '#00f5ff';
+        ctx.stroke();
+
+        // Inner crosshair dot
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = `rgba(0,245,255,${0.3 + depthAlpha})`;
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Hex row lines
+        ctx.beginPath();
+        ctx.moveTo(x - r * 0.35, y);
+        ctx.lineTo(x + r * 0.35, y);
+        ctx.strokeStyle = `rgba(0,245,255,0.15)`;
+        ctx.lineWidth = 0.5;
+        ctx.shadowBlur = 0;
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    // Decay hit flash
+    if (brick.hitFlash > 0) brick.hitFlash = Math.max(0, brick.hitFlash - 0.08);
+}
+
+// ── INIT LEVEL ──
+function initLevel(lvl) {
+    bricks.length = 0;
+    const rows = Math.min(2 + lvl, 12);
+    const cols = Math.floor(canvas.width / HEX_W) - (isMobileView ? 0 : 1);
+    const startX = isMobileView ? 22 : 38;
+
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            let powerUp = 0;
+            const rng = Math.random();
+            if (rng < 0.06) powerUp = 3;
+            else if (rng < 0.14) powerUp = 2;
+            else if (rng < 0.24) powerUp = 1;
+
+            bricks.push({
+                x: c * HEX_W + (r % 2 ? HEX_W / 2 : 0) + startX,
+                y: r * (HEX_H * 0.76) + 90,
+                active: true, row: r, powerUp,
+                hitFlash: 0
+            });
+        }
+    }
+    document.getElementById('lvl-txt').innerText = String(lvl).padStart(2, '0');
+    updateBallIndicators();
+}
+
+function updateBallIndicators() {
+    const container = document.getElementById('ball-indicators');
+    container.innerHTML = '';
+    const max = Math.min(balls.length, 20);
+    for (let i = 0; i < max; i++) {
+        const d = document.createElement('div');
+        d.className = 'ball-dot';
+        container.appendChild(d);
+    }
+    if (balls.length > 20) {
+        const more = document.createElement('span');
+        more.style.cssText = 'font-size:9px;color:rgba(0,245,255,0.5);font-family:Share Tech Mono';
+        more.innerText = `+${balls.length - 20}`;
+        container.appendChild(more);
+    }
+}
+
+// ── FLASH LEVEL TEXT ──
+function flashLevel(text) {
+    levelFlash.innerText = text;
+    levelFlash.style.opacity = '1';
+    setTimeout(() => { levelFlash.style.opacity = '0'; }, 1200);
+}
+
+// ══════════════════════════════════════════════════
+//  OVERLAY STATES
+// ══════════════════════════════════════════════════
+function showOverlay(title, sub, btnText, showStats = false, showSecondary = false) {
+    statusTitle.innerText = title;
+    statusSub.innerText = sub;
+    mainBtn.innerText = btnText;
+    overlayStats.style.display = showStats ? 'flex' : 'none';
+    secBtn.style.display = showSecondary ? 'inline-block' : 'none';
+    adBanner.style.display = 'flex';
+    if (showStats) {
+        document.getElementById('final-score').innerText = score;
+        document.getElementById('final-level').innerText = currentLevel;
+    }
+    overlay.style.display = 'flex';
+}
+
+async function handleBtnClick() {
+    AudioEngine.init();
+    AudioEngine.play(440, 'square', 0.08, 0.2, 880);
+
+    // Show ad on level advance or game over (not first start)
+    if (currentLevel > 1 || score > 0) {
+        adBanner.innerText = '[ LOADING AD... ]';
+        await CG.showAd('midgame');
+        adBanner.innerText = '[ ADVERTISEMENT ZONE ]';
+    }
+
+    overlay.style.display = 'none';
+    gameActive = true;
+    CG.gameplayStart();
+    initLevel(currentLevel);
+    if (balls.length === 0) balls = [createBall(240, 440, 4, -5)];
+    flashLevel(`SECTOR ${String(currentLevel).padStart(2,'0')}`);
+}
+
+function handleSecondary() {
+    // Go to main menu
+    score = 0; currentLevel = 1; balls = [];
+    document.getElementById('score').innerText = '0';
+    document.getElementById('count').innerText = '00';
+    showOverlay('HEXSTRIKE', 'Multiball Grid Protocol', 'INITIALIZE GRID', false, false);
+}
+
+// ══════════════════════════════════════════════════
+//  UPDATE
+// ══════════════════════════════════════════════════
+function update() {
+    if (!gameActive) return;
+
+    // Paddle
+    paddle.x += (mouseX - paddle.width / 2 - paddle.x) * 0.18;
+    paddle.x = Math.max(0, Math.min(canvas.width - paddle.width, paddle.x));
+
+    for (let i = balls.length - 1; i >= 0; i--) {
+        const b = balls[i];
+        b.history.push({ x: b.x, y: b.y });
+        if (b.history.length > 14) b.history.shift();
+
+        b.x += b.dx; b.y += b.dy;
+
+        // Wall collisions
+        if (b.x < b.radius) { b.x = b.radius; b.dx = Math.abs(b.dx); AudioEngine.play(180, 'triangle', 0.04, 0.08); }
+        if (b.x > canvas.width - b.radius) { b.x = canvas.width - b.radius; b.dx = -Math.abs(b.dx); AudioEngine.play(180, 'triangle', 0.04, 0.08); }
+        if (b.y < b.radius) { b.y = b.radius; b.dy = Math.abs(b.dy); AudioEngine.play(180, 'triangle', 0.04, 0.08); }
+
+        // Paddle collision
+        if (b.dy > 0 && b.y + b.radius > paddle.y && b.y < paddle.y + paddle.height &&
+            b.x > paddle.x && b.x < paddle.x + paddle.width) {
+            b.y = paddle.y - b.radius;
+            b.dy = -Math.abs(b.dy);
+            b.dx = ((b.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2)) * 5.5;
+            spawnParticles(b.x, paddle.y, '#00f5ff', 6);
+            AudioEngine.play(320, 'sine', 0.09, 0.12);
+        }
+
+        // Brick collisions
+        bricks.forEach(brick => {
+            if (!brick.active) return;
+            const dist = Math.hypot(b.x - brick.x, b.y - brick.y);
+            if (dist < HEX_RADIUS - 1) {
+                brick.active = false;
+                b.dy *= -1;
+                score += 100 + currentLevel * 10;
+
+                const col = brick.powerUp > 0 ? getPowerUpColor(brick.powerUp) : HIT_COLORS[Math.floor(Math.random() * HIT_COLORS.length)];
+                spawnParticles(brick.x, brick.y, col, brick.powerUp > 0 ? 20 : 10);
+                AudioEngine.play(350 + Math.random() * 150, 'square', 0.06, 0.1);
+
+                if (brick.powerUp > 0) {
+                    for (let j = 0; j < brick.powerUp; j++) {
+                        balls.push(createBall(brick.x, brick.y, (Math.random() - 0.5) * 8, 4 + Math.random() * 2));
+                    }
+                    AudioEngine.play(660, 'sawtooth', 0.1, 0.2, 1320);
+                }
+            }
+        });
+
+        // Ball lost
+        if (b.y > canvas.height + 20) balls.splice(i, 1);
+    }
+
+    const remaining = bricks.filter(b => b.active).length;
+    document.getElementById('score').innerText = score;
+    document.getElementById('count').innerText = String(remaining).padStart(2, '0');
+    updateBallIndicators();
+
+    // Game over
+    if (balls.length === 0) {
+        gameActive = false;
+        CG.gameplayStop();
+        AudioEngine.gameOver();
+        setTimeout(async () => {
+            await CG.showAd('midgame');
+            showOverlay('SYSTEM FAILURE', `Score: ${score} | Sector: ${currentLevel}`, 'RETRY PROTOCOL', true, true);
+            mainBtn.onclick = async () => {
+                score = 0; balls = [createBall(240, 440, 4, -5)];
+                await handleBtnClick();
+            };
+        }, 800);
+    }
+
+    // Level complete
+    if (remaining === 0 && gameActive) {
+        gameActive = false;
+        CG.gameplayStop();
+        CG.happytime();
+        AudioEngine.levelUp();
+        currentLevel++;
+        setTimeout(async () => {
+            await CG.showAd('midgame');
+            showOverlay('SECTOR CLEARED', `Advancing to Sector ${String(currentLevel).padStart(2,'0')}`, 'NEXT SECTOR', true, false);
+            mainBtn.onclick = async () => {
+                balls = [createBall(240, 440, 4, -5)];
+                await handleBtnClick();
+            };
+        }, 600);
+    }
+}
+
+// ══════════════════════════════════════════════════
+//  DRAW
+// ══════════════════════════════════════════════════
+function drawPaddle() {
+    const { x, y, width, height } = paddle;
+
+    // Main bar
+    ctx.save();
+    const grad = ctx.createLinearGradient(x, y, x + width, y);
+    grad.addColorStop(0, 'rgba(0,245,255,0.2)');
+    grad.addColorStop(0.5, 'rgba(0,245,255,0.9)');
+    grad.addColorStop(1, 'rgba(0,245,255,0.2)');
+    ctx.fillStyle = grad;
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#00f5ff';
+    ctx.fillRect(x, y, width, height);
+
+    // Glow line on top
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x + width, y);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = '#fff';
+    ctx.stroke();
+
+    // Corner notches
+    ctx.fillStyle = '#00f5ff';
+    ctx.fillRect(x, y - 3, 4, 3);
+    ctx.fillRect(x + width - 4, y - 3, 4, 3);
+    ctx.restore();
+}
+
+function drawBalls() {
+    balls.forEach(b => {
+        // Trail
+        if (b.history.length > 2) {
+            for (let i = 1; i < b.history.length; i++) {
+                const t = i / b.history.length;
+                ctx.save();
+                ctx.globalAlpha = t * 0.5;
+                ctx.strokeStyle = '#00f5ff';
+                ctx.lineWidth = t * 5;
+                ctx.shadowBlur = 10 * t;
+                ctx.shadowColor = '#00f5ff';
+                ctx.beginPath();
+                ctx.moveTo(b.history[i-1].x, b.history[i-1].y);
+                ctx.lineTo(b.history[i].x, b.history[i].y);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // Ball glow
+        ctx.save();
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#00f5ff';
+        const grad = ctx.createRadialGradient(b.x - 2, b.y - 2, 1, b.x, b.y, b.radius);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.5, '#00f5ff');
+        grad.addColorStop(1, 'rgba(0,245,255,0.3)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    });
+}
+
+function drawHUD() {
+    // Top HUD bar
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,245,255,0.04)';
+    ctx.fillRect(0, 0, canvas.width, 75);
+    ctx.strokeStyle = 'rgba(0,245,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, 75); ctx.lineTo(canvas.width, 75);
+    ctx.stroke();
+
+    // Grid lines (subtle)
+    ctx.strokeStyle = 'rgba(0,245,255,0.03)';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x < canvas.width; x += 40) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    }
+    ctx.restore();
+}
+
+// ── MAIN LOOP ──
+function loop() {
+    // Motion blur clear
+    ctx.fillStyle = 'rgba(2, 4, 8, 0.4)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    drawHUD();
+    bricks.forEach(b => { if (b.active) drawHex(b); });
+    drawPaddle();
+    drawBalls();
+    updateParticles();
+    update();
+
+    requestAnimationFrame(loop);
+}
+
+// ══════════════════════════════════════════════════
+//  INPUT
+// ══════════════════════════════════════════════════
+canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+});
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    mouseX = (e.touches[0].clientX - rect.left) * (canvas.width / rect.width);
+}, { passive: false });
+
+// Prevent context menu
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ── INIT OVERLAY ──
+showOverlay('HEXSTRIKE', 'Multiball Grid Protocol', 'INITIALIZE GRID');
+mainBtn.onclick = handleBtnClick;
+loop();
+</script>
+</body>
+</html>
