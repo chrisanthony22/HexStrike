@@ -77,7 +77,6 @@ body {
 /* CANVAS */
 #gameCanvas {
   display: block;
-  flex: 1;
   width: 100%;
   touch-action: none;
   cursor: crosshair;
@@ -86,6 +85,52 @@ body {
   position: absolute; pointer-events: none; z-index: 3;
   top: 44px; /* below hud */
 }
+
+/* MOBILE MOVE BUTTONS — shown only on touch/no-hover devices */
+#mobile-controls {
+  display: none;
+  width: 100%;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(0,245,255,0.03);
+  border-top: 1px solid rgba(0,245,255,0.12);
+  gap: 8px;
+  z-index: 5;
+}
+/* Only show on devices that have no fine pointer (touch screens) */
+@media (hover: none) and (pointer: coarse) {
+  #gameCanvas { flex: 1; }
+  #mobile-controls { display: flex; }
+}
+/* On hover-capable devices (laptops/desktops) keep canvas filling space */
+@media (hover: hover) {
+  #gameCanvas { flex: 1; }
+}
+.move-btn {
+  flex: 1;
+  height: 52px;
+  background: rgba(0,245,255,0.06);
+  border: 1px solid rgba(0,245,255,0.25);
+  border-radius: 6px;
+  color: var(--cyan);
+  font-size: 26px;
+  font-weight: 900;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 0.1s, box-shadow 0.1s;
+  box-shadow: none;
+}
+.move-btn:active, .move-btn.pressed {
+  background: rgba(0,245,255,0.18);
+  box-shadow: 0 0 16px rgba(0,245,255,0.35);
+}
+/* Shooter count badge in HUD */
+.hud-box.danger .hud-label { color: rgba(255,100,0,0.7); }
+.hud-box.danger .hud-val   { color: #ff7700; text-shadow: 0 0 10px rgba(255,100,0,0.5); }
 
 /* OVERLAY */
 #overlay {
@@ -224,6 +269,10 @@ body::after {
       <span class="hud-label">Blocks</span>
       <span class="hud-val" id="hud-blocks">0</span>
     </div>
+    <div class="hud-box danger">
+      <span class="hud-label">⬡ Shooters</span>
+      <span class="hud-val" id="hud-shooters">0</span>
+    </div>
     <div class="hud-box">
       <span class="hud-label">Score</span>
       <span class="hud-val" id="hud-score">0</span>
@@ -239,6 +288,12 @@ body::after {
   <canvas id="pCanvas"></canvas>
   <canvas id="confetti"></canvas>
   <div id="lvl-flash"></div>
+
+  <!-- Mobile move buttons (hidden on desktop) -->
+  <div id="mobile-controls">
+    <button class="move-btn" id="btn-left">&#8249;</button>
+    <button class="move-btn" id="btn-right">&#8250;</button>
+  </div>
 
   <!-- OVERLAY -->
   <div id="overlay">
@@ -366,11 +421,12 @@ const ccX    = ccC.getContext('2d');
 let GW = 0, GH = 0;
 
 function resizeGame() {
-  const hudH = document.getElementById('hud').offsetHeight;
-  const dpr  = window.devicePixelRatio || 1;
+  const hudH     = document.getElementById('hud').offsetHeight;
+  const ctrlH    = document.getElementById('mobile-controls').offsetHeight;
+  const dpr      = window.devicePixelRatio || 1;
 
   GW = Math.min(window.innerWidth, 480);
-  GH = window.innerHeight - hudH;
+  GH = window.innerHeight - hudH - ctrlH;
 
   canvas.width  = GW * dpr; canvas.height  = GH * dpr;
   canvas.style.width  = GW + 'px'; canvas.style.height = GH + 'px';
@@ -395,6 +451,9 @@ window.addEventListener('resize', () => { resizeGame(); if(gameActive) initLevel
 let score=0, level=1, gameActive=false, mouseX=0;
 let balls=[], bricks=[], shooters=[], bullets=[], particles=[];
 let confettiParts=[];
+// Mobile button state: -1 = left held, 0 = none, 1 = right held
+let mobileMoveDir = 0;
+const MOBILE_SPEED = 7; // pixels per frame when button held
 
 const PAD = { w:100, h:10, x:0, y:0 };
 
@@ -543,6 +602,8 @@ function updateHUD(){
   document.getElementById('hud-lvl').textContent = level;
   document.getElementById('hud-blocks').textContent = bricks.filter(b=>b.active).length;
   document.getElementById('hud-score').textContent = score;
+  const activeShooters = bricks.filter(b=>b.active && b.isShooter).length;
+  document.getElementById('hud-shooters').textContent = activeShooters;
   const bd = document.getElementById('ball-dots');
   bd.innerHTML='';
   const show=Math.min(balls.length,15);
@@ -843,9 +904,17 @@ function update(){
 
   // Paddle follow mouse/touch (only if paddle alive)
   if(PAD.w>0){
-    const targetX = mouseX - PAD.w/2;
-    PAD.x += (targetX - PAD.x) * .18;
+    if(mobileMoveDir !== 0){
+      // Button-driven movement — move directly at fixed speed
+      PAD.x += mobileMoveDir * MOBILE_SPEED;
+    } else {
+      // Mouse / swipe-drag — smooth lerp toward cursor
+      const targetX = mouseX - PAD.w/2;
+      PAD.x += (targetX - PAD.x) * .18;
+    }
     PAD.x = Math.max(0, Math.min(GW - PAD.w, PAD.x));
+    // Keep mouseX in sync so swipe resumes smoothly after button release
+    mouseX = PAD.x + PAD.w/2;
   }
 
   // Shooter logic
@@ -980,6 +1049,7 @@ function loop(){
 // INPUT
 // ═══════════════════════════════════════
 canvas.addEventListener('mousemove', e=>{
+  mobileMoveDir = 0; // cancel button hold when mouse moves on canvas
   const r=canvas.getBoundingClientRect();
   mouseX = e.clientX - r.left;
 });
@@ -996,6 +1066,31 @@ canvas.addEventListener('touchstart', e=>{
 },{passive:false});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 document.addEventListener('click',()=>SFX.init(),{once:true});
+
+// ── MOBILE < > BUTTONS ──
+// Use pointer events so hold-and-drag works reliably on touch
+function bindMoveBtn(id, dir){
+  const btn = document.getElementById(id);
+  const start = e => {
+    e.preventDefault();
+    SFX.init();
+    mobileMoveDir = dir;
+    btn.classList.add('pressed');
+  };
+  const stop = e => {
+    e.preventDefault();
+    if(mobileMoveDir === dir) mobileMoveDir = 0;
+    btn.classList.remove('pressed');
+  };
+  btn.addEventListener('pointerdown',  start, { passive: false });
+  btn.addEventListener('pointerup',    stop,  { passive: false });
+  btn.addEventListener('pointercancel',stop,  { passive: false });
+  btn.addEventListener('pointerleave', stop,  { passive: false });
+  // Prevent context menu on long press
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+}
+bindMoveBtn('btn-left',  -1);
+bindMoveBtn('btn-right',  1);
 
 // ═══════════════════════════════════════
 // BOOT
